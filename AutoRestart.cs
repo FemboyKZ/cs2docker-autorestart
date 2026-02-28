@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
@@ -10,13 +12,15 @@ public class AutoRestartPlugin : BasePlugin
 {
     public override string ModuleName => "Auto Restart";
 
-    public override string ModuleVersion => "1.0.0";
+    public override string ModuleVersion => "1.0.1";
 
     private string _buildVersion = null!;
 
     private Timer _timer = null!;
     
     private bool _restartNeeded = false;
+
+    private Dictionary<string, string> _pluginVersions = new();
 
     public override void Load(bool hotReload)
     {
@@ -25,6 +29,9 @@ public class AutoRestartPlugin : BasePlugin
         _buildVersion = Environment.GetEnvironmentVariable("build_ver")?.Trim()
             ?? throw new Exception("Environment variable 'build_ver' was not found, this plugin is meant to be used with cs2docker!");
 
+        // Snapshot current plugin versions from watchdog layer latest.txt files
+        _pluginVersions = ReadPluginVersions();
+
         _timer = new Timer(OnTimerCallback, null, 0, 10000);
     }
 
@@ -32,11 +39,41 @@ public class AutoRestartPlugin : BasePlugin
     {
         _timer.Dispose();
     }
-    
+
+    private static Dictionary<string, string> ReadPluginVersions()
+    {
+        var versions = new Dictionary<string, string>();
+        var layersDir = "/watchdog/layers";
+        if (!Directory.Exists(layersDir))
+            return versions;
+
+        foreach (var dir in Directory.EnumerateDirectories(layersDir))
+        {
+            var latestFile = Path.Combine(dir, "latest.txt");
+            if (File.Exists(latestFile))
+            {
+                var name = Path.GetFileName(dir);
+                versions[name] = File.ReadAllText(latestFile).Trim();
+            }
+        }
+        return versions;
+    }
+
     private bool IsServerOutOfDate()
     {
         var latestBuildVersion = File.ReadAllText("/watchdog/cs2/latest.txt").Trim();
-        return _buildVersion != latestBuildVersion;
+        if (_buildVersion != latestBuildVersion)
+            return true;
+
+        // Check if any plugin layer has been updated since startup
+        var currentVersions = ReadPluginVersions();
+        foreach (var (name, startupVer) in _pluginVersions)
+        {
+            if (currentVersions.TryGetValue(name, out var currentVer) && currentVer != startupVer)
+                return true;
+        }
+
+        return false;
     }
 
     private void OnTimerCallback(object? state)
