@@ -14,7 +14,7 @@ public class AutoRestartConfig : BasePluginConfig
     public string DailyRestartTime { get; set; } = "";
 }
 
-public class AutoRestartPlugin : BasePlugin<AutoRestartConfig>
+public class AutoRestartPlugin : BasePlugin, IPluginConfig<AutoRestartConfig>
 {
     public override string ModuleName => "Auto Restart";
 
@@ -33,6 +33,10 @@ public class AutoRestartPlugin : BasePlugin<AutoRestartConfig>
     private DateTime _lastDailyRestartDate = DateTime.MinValue;
 
     private Dictionary<string, string> _pluginVersions = new();
+
+    public AutoRestartConfig Config { get; set; } = new();
+
+    public void OnConfigParsed(AutoRestartConfig config) => Config = config;
 
     public override void Load(bool hotReload)
     {
