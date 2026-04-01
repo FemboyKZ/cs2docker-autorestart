@@ -8,7 +8,13 @@ using CounterStrikeSharp.API.Core;
 
 namespace AutoRestart;
 
-public class AutoRestartPlugin : BasePlugin
+public class AutoRestartConfig : BasePluginConfig
+{
+    [System.Text.Json.Serialization.JsonPropertyName("daily_restart_time")]
+    public string DailyRestartTime { get; set; } = "";
+}
+
+public class AutoRestartPlugin : BasePlugin<AutoRestartConfig>
 {
     public override string ModuleName => "Auto Restart";
 
@@ -39,7 +45,10 @@ public class AutoRestartPlugin : BasePlugin
         _pluginVersions = ReadPluginVersions();
 
         // Parse optional daily restart time (UTC, "HH:mm" format), e.g. daily_restart_time=04:00
+        // Env var takes priority; config file is used as fallback
         var dailyRestartTimeStr = Environment.GetEnvironmentVariable("daily_restart_time")?.Trim();
+        if (string.IsNullOrEmpty(dailyRestartTimeStr))
+            dailyRestartTimeStr = Config.DailyRestartTime?.Trim();
         if (!string.IsNullOrEmpty(dailyRestartTimeStr) && TimeSpan.TryParse(dailyRestartTimeStr, out var parsedTime))
             _dailyRestartTime = parsedTime;
 
