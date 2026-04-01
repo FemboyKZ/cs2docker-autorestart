@@ -18,7 +18,7 @@ public class AutoRestartPlugin : BasePlugin<AutoRestartConfig>
 {
     public override string ModuleName => "Auto Restart";
 
-    public override string ModuleVersion => "1.0.2";
+    public override string ModuleVersion => "1.0.3";
 
     private string _buildVersion = null!;
 
