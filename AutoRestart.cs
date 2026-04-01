@@ -12,13 +12,19 @@ public class AutoRestartPlugin : BasePlugin
 {
     public override string ModuleName => "Auto Restart";
 
-    public override string ModuleVersion => "1.0.1";
+    public override string ModuleVersion => "1.0.2";
 
     private string _buildVersion = null!;
 
     private Timer _timer = null!;
     
     private bool _restartNeeded = false;
+
+    private bool _scheduledRestartNeeded = false;
+
+    private TimeSpan? _dailyRestartTime = null;
+
+    private DateTime _lastDailyRestartDate = DateTime.MinValue;
 
     private Dictionary<string, string> _pluginVersions = new();
 
@@ -31,6 +37,11 @@ public class AutoRestartPlugin : BasePlugin
 
         // Snapshot current plugin versions from watchdog layer latest.txt files
         _pluginVersions = ReadPluginVersions();
+
+        // Parse optional daily restart time (UTC, "HH:mm" format), e.g. daily_restart_time=04:00
+        var dailyRestartTimeStr = Environment.GetEnvironmentVariable("daily_restart_time")?.Trim();
+        if (!string.IsNullOrEmpty(dailyRestartTimeStr) && TimeSpan.TryParse(dailyRestartTimeStr, out var parsedTime))
+            _dailyRestartTime = parsedTime;
 
         _timer = new Timer(OnTimerCallback, null, 0, 10000);
     }
@@ -76,12 +87,28 @@ public class AutoRestartPlugin : BasePlugin
         return false;
     }
 
+    private bool CheckDailyRestart()
+    {
+        if (!_dailyRestartTime.HasValue || _scheduledRestartNeeded)
+            return false;
+        var now = DateTime.UtcNow;
+        return now.Date > _lastDailyRestartDate && now.TimeOfDay >= _dailyRestartTime.Value;
+    }
+
     private void OnTimerCallback(object? state)
     {
-        if (IsServerOutOfDate())
+        var isDailyRestartDue = CheckDailyRestart();
+
+        if (isDailyRestartDue || _scheduledRestartNeeded || IsServerOutOfDate())
         {
             Server.NextWorldUpdate(() =>
             {
+                if (isDailyRestartDue && !_scheduledRestartNeeded)
+                {
+                    _scheduledRestartNeeded = true;
+                    _lastDailyRestartDate = DateTime.UtcNow.Date;
+                }
+
                 var numPlayers = Utilities.GetPlayers().Where(x => !x.IsBot).Count();
                 if (numPlayers == 0)
                 {
@@ -98,7 +125,7 @@ public class AutoRestartPlugin : BasePlugin
 
     public void OnMapEnd()
     {
-        if (_restartNeeded || IsServerOutOfDate())
+        if (_restartNeeded || _scheduledRestartNeeded || IsServerOutOfDate())
         {
             // Doesn't seem to be exiting cleanly without NextWorldUpdate?
             Server.NextWorldUpdate(() => Server.ExecuteCommand("quit"));
