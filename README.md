@@ -38,7 +38,7 @@ git submodule update --init --recursive
 
 ### Docker (recommended)
 
-Produces the Linux `linuxsteamrt64` `.so` and the Metamod plugin layout:
+Produces the Linux `linuxsteamrt64.so` and the Metamod plugin layout:
 
 ```sh
 docker compose up --build
@@ -47,11 +47,11 @@ docker compose up --build
 Result:
 
 ```text
-dist/addons/metamod/autorestart.vdf
-dist/addons/autorestart/bin/linuxsteamrt64/autorestart.so
+output/addons/metamod/autorestart.vdf
+output/addons/autorestart/bin/linuxsteamrt64/autorestart.so
 ```
 
-Drop the contents of `dist/addons/` into the server's `game/csgo/addons/` (this is what the CS2Docker `autorestart` layer ships).
+Drop the contents of `output/addons/` into the server's `game/csgo/addons/` (this is what the CS2Docker `autorestart` layer ships).
 
 ### Local (AMBuild)
 
@@ -68,4 +68,4 @@ python3 ../configure.py \
 ambuild
 ```
 
-The packaged output is in `build/package/cs2/`.
+The packaged output is in `build/package/addons/`.
