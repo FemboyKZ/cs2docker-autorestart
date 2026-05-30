@@ -20,16 +20,9 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-
-// Directory iteration: POSIX dirent on Linux (std::filesystem drags in libstdc++'s
-// <ranges>, which clang rejects on the steamrt toolchain), std::filesystem elsewhere.
-#ifdef _WIN32
 #include <filesystem>
+
 namespace fs = std::filesystem;
-#else
-#include <dirent.h>
-#include <sys/stat.h>
-#endif
 
 #include "tier0/memdbgon.h"
 
@@ -147,8 +140,6 @@ bool AutoRestartPlugin::Unload(char *error, size_t maxlen)
 std::map<std::string, std::string> AutoRestartPlugin::ReadPluginVersions() const
 {
 	std::map<std::string, std::string> versions;
-
-#ifdef _WIN32
 	std::error_code ec;
 	if (!fs::is_directory(kLayersDir, ec))
 	{
@@ -167,36 +158,6 @@ std::map<std::string, std::string> AutoRestartPlugin::ReadPluginVersions() const
 			versions[entry.path().filename().string()] = latest;
 		}
 	}
-#else
-	DIR *dir = opendir(kLayersDir);
-	if (!dir)
-	{
-		return versions;
-	}
-
-	while (struct dirent *ent = readdir(dir))
-	{
-		std::string name = ent->d_name;
-		if (name == "." || name == "..")
-		{
-			continue;
-		}
-
-		std::string full = std::string(kLayersDir) + "/" + name;
-		struct stat st;
-		if (stat(full.c_str(), &st) != 0 || !S_ISDIR(st.st_mode))
-		{
-			continue;
-		}
-
-		std::string latest = ReadFileTrimmed(full + "/latest.txt");
-		if (!latest.empty())
-		{
-			versions[name] = latest;
-		}
-	}
-	closedir(dir);
-#endif
 
 	return versions;
 }
