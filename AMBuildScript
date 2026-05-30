@@ -209,6 +209,9 @@ class MMSPluginConfig(object):
 #define PLUGIN_LICENSE        \"{self.metadata['license']}\"
 
 extern const char* PLUGIN_FULL_VERSION;
+extern const char* PLUGIN_REVISION_SHORT;
+extern const char* PLUGIN_REVISION_LONG;
+extern const char* PLUGIN_REVISION_COUNT;
 
 #endif /* _PLUGIN_METADATA_INFORMATION_H_ */
       """.encode('utf-8'))
@@ -220,30 +223,33 @@ extern const char* PLUGIN_FULL_VERSION;
     version = self.metadata['version']
 
     direct_head, git_head_path = getGitHeadPath()
-    parsed_version = 'DEV-untracked'
+    shorthash = longhash = revision_count = '0'
     if direct_head and git_head_path:
       # Force track head changes to trigger recompilation
       builder.AddConfigureFile(git_head_path)
       builder.AddConfigureFile(direct_head)
 
-      try:
-        parsed_version = runAndReturn(['git', 'describe', '--tags', '--long'])
-      except subprocess.SubprocessError as e:
-        print("git describe failed to find any tags")
-        try:
-          parsed_version = runAndReturn(['git', 'log', '--pretty=format:%h:%H', '-n', '1'])
-          parsed_version = parsed_version.split(':')[0]
-        except subprocess.SubprocessError as e:
-          print("git log failed to find any commit hash, falling back to placeholder version")
+      revision_count = runAndReturn(['git', 'rev-list', '--count', 'HEAD'])
+      revision_hash = runAndReturn(['git', 'log', '--pretty=format:%h:%H', '-n', '1'])
+      shorthash, longhash = revision_hash.split(':')
 
-    if '{{parsed-version}}' in version:
-      version = version.replace('{{parsed-version}}', parsed_version)
+    if '{{git-shorthash}}' in version:
+      version = version.replace('{{git-shorthash}}', shorthash)
+
+    if '{{git-longhash}}' in version:
+      version = version.replace('{{git-longhash}}', longhash)
+
+    if '{{git-count}}' in version:
+      version = version.replace('{{git-count}}', revision_count)
 
     # For the version strings and git hashes compile that to a static library instead,
     # to prevent a full recompilation on version/git changes which would only trigger this cpp
     # and linking to be performed
     versionlib_cpp = builder.AddOutputFile(os.path.join('versioning', 'versionlib.cpp'), f"""
 const char *PLUGIN_FULL_VERSION   = \"{version}\";
+const char *PLUGIN_REVISION_SHORT = \"{shorthash}\";
+const char *PLUGIN_REVISION_LONG  = \"{longhash}\";
+const char *PLUGIN_REVISION_COUNT = \"{revision_count}\";
     """.encode('utf-8'))
 
     for cxx in self.all_targets:
@@ -302,6 +308,7 @@ const char *PLUGIN_FULL_VERSION   = \"{version}\";
         '-pipe',
         '-fno-strict-aliasing',
         '-Wall',
+        '-Werror',
         '-Wno-sign-compare',
         '-Wno-uninitialized',
         '-Wno-unused',

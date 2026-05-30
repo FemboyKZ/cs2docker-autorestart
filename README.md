@@ -20,12 +20,13 @@ When a restart is warranted:
 
 ## Configuration
 
-Both are read from the environment (set by CS2Docker):
+All read from the environment (set by CS2Docker):
 
-| Env var              | Required | Description                                           |
-| -------------------- | -------- | ----------------------------------------------------- |
-| `build_ver`          | yes      | Current server build version (provided by cs2docker). |
-| `daily_restart_time` | no       | UTC time `HH:mm` (or `HH:mm:ss`) for a daily restart. |
+| Env var              | Required | Description                                                         |
+| -------------------- | -------- | ------------------------------------------------------------------- |
+| `build_ver`          | yes      | Current server build version (provided by cs2docker).               |
+| `daily_restart_time` | no       | UTC time `HH:mm` (or `HH:mm:ss`) for a daily restart.               |
+| `discord_webhook`    | no       | Discord webhook URL; a message posted once per restart decision.    |
 
 ## Building
 

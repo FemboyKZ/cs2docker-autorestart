@@ -1,4 +1,5 @@
 #include "autorestart.h"
+#include "discord.h"
 #include "recipientfilter.h"
 
 #include "engine/igameeventsystem.h"
@@ -107,6 +108,13 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 		}
 	}
 
+	// Optional Discord webhook for restart notifications.
+	const char *webhook = std::getenv("discord_webhook");
+	if (webhook && *webhook)
+	{
+		m_discordWebhook = Trim(webhook);
+	}
+
 	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_GameFrame), true);
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AutoRestartPlugin::Hook_StartupServer), true);
 	SH_ADD_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_OnClientConnected), false);
@@ -115,7 +123,8 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 	// 0.0 forces a check on the first frame.
 	m_lastCheckTime = 0.0;
 
-	Msg("[AutoRestart] Loaded. build_ver=%s, daily_restart=%s\n", m_buildVersion.c_str(), m_hasDailyRestart ? "on" : "off");
+	Msg("[AutoRestart] Loaded. build_ver=%s, daily_restart=%s, discord=%s\n", m_buildVersion.c_str(), m_hasDailyRestart ? "on" : "off",
+		m_discordWebhook.empty() ? "off" : "on");
 
 	return true;
 }
@@ -243,7 +252,27 @@ void AutoRestartPlugin::CheckAndRestart()
 		m_lastDailyRestartDay = static_cast<int>(std::time(nullptr) / 86400);
 	}
 
-	if (CountHumanPlayers() == 0)
+	int numPlayers = CountHumanPlayers();
+
+	// Notify Discord once per restart decision.
+	if (!m_discordNotified && !m_discordWebhook.empty())
+	{
+		m_discordNotified = true;
+		const char *reason = (isDailyRestartDue || m_scheduledRestartNeeded) ? "scheduled daily restart" : "server update";
+		char buf[256];
+		if (numPlayers == 0)
+		{
+			V_snprintf(buf, sizeof(buf), "AutoRestart: %s - server empty, restarting now.", reason);
+		}
+		else
+		{
+			V_snprintf(buf, sizeof(buf), "AutoRestart: %s - %d player%s online, restarting at next map.", reason, numPlayers,
+					   numPlayers == 1 ? "" : "s");
+		}
+		Discord_PostWebhook(m_discordWebhook, buf);
+	}
+
+	if (numPlayers == 0)
 	{
 		g_pEngineServer2->ServerCommand("quit");
 	}
