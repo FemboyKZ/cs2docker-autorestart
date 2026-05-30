@@ -1,0 +1,11 @@
+{
+    "name": "autorestart",
+    "alias": "autorestart",
+    "display_name": "AutoRestart",
+    "description": "Auto restart the server when a game/plugin update is detected (cs2docker)",
+    "author": "jvnipers",
+    "url": "https://github.com/FemboyKZ/cs2docker-autorestart",
+    "log_tag": "AutoRestart",
+    "license": "AGPL-3.0",
+    "version": "{{parsed-version}}"
+}
