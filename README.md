@@ -41,7 +41,7 @@ git submodule update --init --recursive
 Produces the Linux `linuxsteamrt64` `.so` and the Metamod plugin layout:
 
 ```sh
-docker build .
+docker compose up --build
 ```
 
 Result:
