@@ -64,7 +64,7 @@ public: // ISmmPlugin metadata
 
 	const char *GetVersion() override
 	{
-		return "1.1.0";
+		return "1.1.1";
 	}
 
 	const char *GetDate() override
@@ -102,6 +102,10 @@ private:
 
 	double m_lastCheckTime = 0.0; // Plat_FloatTime() of last 10s tick
 	int m_startupCount = 0;       // number of StartupServer calls seen (first == initial boot map)
+
+	// Empty-server quit is delayed so the async Discord webhook has time to flush.
+	bool m_quitPending = false;
+	double m_quitAtTime = 0.0; // Plat_FloatTime() at which to issue the deferred quit
 
 	bool m_humanConnected[ABSOLUTE_PLAYER_LIMIT] = {};
 };

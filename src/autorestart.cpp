@@ -273,7 +273,11 @@ void AutoRestartPlugin::CheckAndRestart()
 
 	if (numPlayers == 0)
 	{
-		g_pEngineServer2->ServerCommand("quit");
+		if (!m_quitPending)
+		{
+			m_quitPending = true;
+			m_quitAtTime = Plat_FloatTime() + (m_discordWebhook.empty() ? 0.0 : 5.0);
+		}
 	}
 	else if (!m_restartNeeded)
 	{
@@ -285,6 +289,13 @@ void AutoRestartPlugin::CheckAndRestart()
 void AutoRestartPlugin::Hook_GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
 {
 	double now = Plat_FloatTime();
+
+	if (m_quitPending && now >= m_quitAtTime)
+	{
+		g_pEngineServer2->ServerCommand("quit");
+		RETURN_META(MRES_IGNORED);
+	}
+
 	if (now - m_lastCheckTime < 10.0)
 	{
 		RETURN_META(MRES_IGNORED);
