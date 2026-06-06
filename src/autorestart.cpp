@@ -104,6 +104,11 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 		{
 			m_dailyRestartSeconds = hh * 3600 + mm * 60 + ss;
 			m_hasDailyRestart = true;
+
+			std::time_t now = std::time(nullptr);
+			int today = static_cast<int>(now / 86400);
+			int secOfDay = static_cast<int>(now % 86400);
+			m_lastDailyRestartDay = (secOfDay >= m_dailyRestartSeconds) ? today : today - 1;
 		}
 	}
 
