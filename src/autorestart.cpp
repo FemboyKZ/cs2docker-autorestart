@@ -119,6 +119,16 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 		m_discordWebhook = Trim(webhook);
 	}
 
+	if (late)
+	{
+		m_startupCount = 1;
+		for (int i = 0; i < ABSOLUTE_PLAYER_LIMIT; i++)
+		{
+			m_humanConnected[i] = g_pEngineServer2->GetPlayerNetInfo(CPlayerSlot(i)) != nullptr;
+		}
+		Msg("[AutoRestart] Late load detected; seeded %d connected player(s).\n", CountHumanPlayers());
+	}
+
 	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_GameFrame), true);
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AutoRestartPlugin::Hook_StartupServer), true);
 	SH_ADD_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_OnClientConnected), false);
