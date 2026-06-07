@@ -7,6 +7,6 @@
 
 #include <string>
 
-// POST {"content": <content>} to the given Discord webhook URL.
+// POST a single embed to the given Discord webhook URL.
 // No-op if url is empty or Steam HTTP is unavailable.
-void Discord_PostWebhook(const std::string &url, const std::string &content);
+void Discord_PostEmbed(const std::string &url, const std::string &title, const std::string &description, int color);

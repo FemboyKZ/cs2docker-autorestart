@@ -89,7 +89,7 @@ private:
 	CCallResult<DiscordRequest, HTTPRequestCompleted_t> m_callResult;
 };
 
-void Discord_PostWebhook(const std::string &url, const std::string &content)
+static void PostJson(const std::string &url, const std::string &body)
 {
 	if (url.empty())
 	{
@@ -101,8 +101,6 @@ void Discord_PostWebhook(const std::string &url, const std::string &content)
 	{
 		return;
 	}
-
-	std::string body = "{\"content\":\"" + JsonEscape(content) + "\"}";
 
 	HTTPRequestHandle req = http->CreateHTTPRequest(k_EHTTPMethodPOST, url.c_str());
 	if (req == INVALID_HTTPREQUEST_HANDLE)
@@ -120,4 +118,11 @@ void Discord_PostWebhook(const std::string &url, const std::string &content)
 	}
 
 	new DiscordRequest(req, call);
+}
+
+void Discord_PostEmbed(const std::string &url, const std::string &title, const std::string &description, int color)
+{
+	std::string body = "{\"embeds\":[{\"title\":\"" + JsonEscape(title) + "\",\"description\":\"" + JsonEscape(description)
+					   + "\",\"color\":" + std::to_string(color) + "}]}";
+	PostJson(url, body);
 }

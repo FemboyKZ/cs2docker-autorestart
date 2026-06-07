@@ -97,6 +97,7 @@ private:
 	std::map<std::string, std::string> m_pluginVersions; // snapshot taken at load
 
 	std::string m_discordWebhook;   // optional Discord webhook URL (env: discord_webhook)
+	std::string m_serverName;       // optional server name for notifications (env: server_name)
 	bool m_discordNotified = false; // ensures we post to Discord only once per restart decision
 
 	bool m_restartNeeded = false;

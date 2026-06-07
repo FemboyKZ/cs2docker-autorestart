@@ -120,6 +120,13 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 		m_discordWebhook = Trim(webhook);
 	}
 
+	// Optional server name shown in the Discord notification.
+	const char *serverName = std::getenv("server_name");
+	if (serverName && *serverName)
+	{
+		m_serverName = Trim(serverName);
+	}
+
 	if (late)
 	{
 		m_startupCount = 1;
@@ -307,35 +314,42 @@ void AutoRestartPlugin::CheckAndRestart()
 
 	int numPlayers = CountHumanPlayers();
 
+	bool scheduled = isDailyRestartDue || m_scheduledRestartNeeded;
+	const char *reason = scheduled ? "Scheduled daily restart" : "Server update";
+
 	// Notify Discord once per restart decision.
 	if (!m_discordNotified && !m_discordWebhook.empty())
 	{
 		m_discordNotified = true;
-		const char *reason = (isDailyRestartDue || m_scheduledRestartNeeded) ? "scheduled daily restart" : "server update";
-		char buf[256];
+		int color = scheduled ? 0x3498DB : 0xE67E22; // blue for daily, orange for update
+		char desc[256];
 		if (numPlayers == 0)
 		{
-			V_snprintf(buf, sizeof(buf), "AutoRestart: %s - server empty, restarting now.", reason);
+			V_snprintf(desc, sizeof(desc), "%s - server empty, restarting now.", reason);
 		}
 		else
 		{
-			V_snprintf(buf, sizeof(buf), "AutoRestart: %s - %d player%s online, restarting at next map.", reason, numPlayers,
+			V_snprintf(desc, sizeof(desc), "%s - %d player%s online, restarting at next map.", reason, numPlayers,
 					   numPlayers == 1 ? "" : "s");
 		}
-		Discord_PostWebhook(m_discordWebhook, buf);
+		const char *title = m_serverName.empty() ? "AutoRestart" : m_serverName.c_str();
+		Discord_PostEmbed(m_discordWebhook, title, desc, color);
 	}
 
 	if (numPlayers == 0)
 	{
 		if (!m_quitPending)
 		{
+			double delay = m_discordWebhook.empty() ? 0.0 : 5.0;
 			m_quitPending = true;
-			m_quitAtTime = Plat_FloatTime() + (m_discordWebhook.empty() ? 0.0 : 5.0);
+			m_quitAtTime = Plat_FloatTime() + delay;
+			Msg("[AutoRestart] %s: server empty, quitting in %.0fs.\n", reason, delay);
 		}
 	}
 	else if (!m_restartNeeded)
 	{
 		m_restartNeeded = true;
+		Msg("[AutoRestart] %s: %d player(s) online, will restart at next map.\n", reason, numPlayers);
 		PrintToChatAll("The server will restart at the next opportunity!");
 	}
 }
@@ -346,6 +360,7 @@ void AutoRestartPlugin::Hook_GameFrame(bool simulating, bool bFirstTick, bool bL
 
 	if (m_quitPending && now >= m_quitAtTime)
 	{
+		Msg("[AutoRestart] Deferred quit firing, shutting down server.\n");
 		g_pEngineServer2->ServerCommand("quit");
 		RETURN_META(MRES_IGNORED);
 	}
@@ -378,6 +393,7 @@ void AutoRestartPlugin::Hook_StartupServer(const GameSessionConfiguration_t &con
 
 	if (m_restartNeeded || m_scheduledRestartNeeded || m_outOfDate)
 	{
+		Msg("[AutoRestart] Map change with restart pending, shutting down server.\n");
 		g_pEngineServer2->ServerCommand("quit");
 	}
 
