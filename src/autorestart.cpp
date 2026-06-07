@@ -48,6 +48,7 @@ SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayer
 
 static const char *kBuildVersionFile = "/watchdog/cs2/latest.txt";
 static const char *kLayersDir = "/watchdog/layers";
+static const double kVersionCheckInterval = 60.0; // seconds
 
 static std::string Trim(const std::string &s)
 {
@@ -134,8 +135,9 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 	SH_ADD_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_OnClientConnected), false);
 	SH_ADD_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_ClientDisconnect), true);
 
-	// 0.0 forces a check on the first frame.
+	// 0.0 forces a check on the first frame
 	m_lastCheckTime = 0.0;
+	m_lastVersionCheckTime = -kVersionCheckInterval;
 
 	Msg("[AutoRestart] Loaded. build_ver=%s, daily_restart=%s, discord=%s\n", m_buildVersion.c_str(), m_hasDailyRestart ? "on" : "off",
 		m_discordWebhook.empty() ? "off" : "on");
@@ -177,20 +179,47 @@ std::map<std::string, std::string> AutoRestartPlugin::ReadPluginVersions() const
 	return versions;
 }
 
-bool AutoRestartPlugin::IsServerOutOfDate()
+bool AutoRestartPlugin::VersionFileUnchanged(const std::string &path)
 {
-	std::string latestBuild = ReadFileTrimmed(kBuildVersionFile);
-	if (!latestBuild.empty() && m_buildVersion != latestBuild)
+	std::error_code ec;
+	auto mt = fs::last_write_time(path, ec);
+	if (ec)
+	{
+		// Can't stat
+		return false;
+	}
+	auto it = m_versionMtimes.find(path);
+	if (it != m_versionMtimes.end() && it->second == mt)
 	{
 		return true;
 	}
+	m_versionMtimes[path] = mt;
+	return false;
+}
 
-	// Check if any plugin layer has been updated since startup.
-	std::map<std::string, std::string> current = ReadPluginVersions();
+bool AutoRestartPlugin::IsServerOutOfDate()
+{
+	// Build version: only re-read when the file's mtime has moved.
+	if (!VersionFileUnchanged(kBuildVersionFile))
+	{
+		std::string latestBuild = ReadFileTrimmed(kBuildVersionFile);
+		if (!latestBuild.empty() && m_buildVersion != latestBuild)
+		{
+			return true;
+		}
+	}
+
+	// Plugin layers: iterate the names captured at startup and
+	// skip any whose latest.txt mtime is unchanged since we last looked.
 	for (const auto &[name, startupVer] : m_pluginVersions)
 	{
-		auto it = current.find(name);
-		if (it != current.end() && it->second != startupVer)
+		std::string path = std::string(kLayersDir) + "/" + name + "/latest.txt";
+		if (VersionFileUnchanged(path))
+		{
+			continue;
+		}
+		std::string current = ReadFileTrimmed(path);
+		if (!current.empty() && current != startupVer)
 		{
 			return true;
 		}
@@ -255,7 +284,17 @@ void AutoRestartPlugin::CheckAndRestart()
 {
 	bool isDailyRestartDue = CheckDailyRestart();
 
-	if (!(isDailyRestartDue || m_scheduledRestartNeeded || IsServerOutOfDate()))
+	if (!m_outOfDate)
+	{
+		double now = Plat_FloatTime();
+		if (now - m_lastVersionCheckTime >= kVersionCheckInterval)
+		{
+			m_lastVersionCheckTime = now;
+			m_outOfDate = IsServerOutOfDate();
+		}
+	}
+
+	if (!(isDailyRestartDue || m_scheduledRestartNeeded || m_outOfDate))
 	{
 		return;
 	}
@@ -332,7 +371,12 @@ void AutoRestartPlugin::Hook_StartupServer(const GameSessionConfiguration_t &con
 		RETURN_META(MRES_IGNORED);
 	}
 
-	if (m_restartNeeded || m_scheduledRestartNeeded || IsServerOutOfDate())
+	if (!m_outOfDate)
+	{
+		m_outOfDate = IsServerOutOfDate();
+	}
+
+	if (m_restartNeeded || m_scheduledRestartNeeded || m_outOfDate)
 	{
 		g_pEngineServer2->ServerCommand("quit");
 	}

@@ -16,6 +16,7 @@
 #include <playerslot.h>
 #include "networksystem/inetworkserializer.h"
 
+#include <filesystem>
 #include <map>
 #include <string>
 
@@ -64,7 +65,7 @@ public: // ISmmPlugin metadata
 
 	const char *GetVersion() override
 	{
-		return "1.1.2";
+		return "1.2.0";
 	}
 
 	const char *GetDate() override
@@ -87,6 +88,11 @@ private:
 
 	std::map<std::string, std::string> ReadPluginVersions() const;
 
+	// True if the version file at path is unchanged (by mtime) since last checked;
+	// records the current mtime as a side effect.
+	// Lets IsServerOutOfDate() skip re-reading files that haven't moved.
+	bool VersionFileUnchanged(const std::string &path);
+
 	std::string m_buildVersion;
 	std::map<std::string, std::string> m_pluginVersions; // snapshot taken at load
 
@@ -95,6 +101,10 @@ private:
 
 	bool m_restartNeeded = false;
 	bool m_scheduledRestartNeeded = false;
+
+	bool m_outOfDate = false;
+	double m_lastVersionCheckTime = 0.0;                                    // Plat_FloatTime() of last version-file poll
+	std::map<std::string, std::filesystem::file_time_type> m_versionMtimes; // path -> last-seen mtime
 
 	bool m_hasDailyRestart = false;
 	int m_dailyRestartSeconds = 0;  // seconds since UTC midnight
