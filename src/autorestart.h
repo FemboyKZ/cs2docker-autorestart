@@ -33,9 +33,6 @@ public:
 public: // hooks
 	void Hook_GameFrame(bool simulating, bool bFirstTick, bool bLastTick);
 	void Hook_StartupServer(const GameSessionConfiguration_t &config, ISource2WorldSession *, const char *);
-	void Hook_OnClientConnected(CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, const char *pszAddress,
-								bool bFakePlayer);
-	void Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID);
 
 public: // ISmmPlugin metadata
 	const char *GetAuthor() override
@@ -117,8 +114,6 @@ private:
 	// Empty-server quit is delayed so the async Discord webhook has time to flush.
 	bool m_quitPending = false;
 	double m_quitAtTime = 0.0; // Plat_FloatTime() at which to issue the deferred quit
-
-	bool m_humanConnected[ABSOLUTE_PLAYER_LIMIT] = {};
 };
 
 extern AutoRestartPlugin g_AutoRestartPlugin;

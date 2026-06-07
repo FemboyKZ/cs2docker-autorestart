@@ -42,9 +42,6 @@ class GameSessionConfiguration_t
 
 SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
 SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t &, ISource2WorldSession *, const char *);
-SH_DECL_HOOK6_void(IServerGameClients, OnClientConnected, SH_NOATTRIB, 0, CPlayerSlot, const char *, uint64, const char *, const char *, bool);
-SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64,
-				   const char *);
 
 static const char *kBuildVersionFile = "/watchdog/cs2/latest.txt";
 static const char *kLayersDir = "/watchdog/layers";
@@ -127,20 +124,16 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 		m_serverName = Trim(serverName);
 	}
 
+	// On a late load the boot map's StartupServer already fired
+	// count it as seen so the next map change isn't mistaken for the initial boot.
 	if (late)
 	{
 		m_startupCount = 1;
-		for (int i = 0; i < ABSOLUTE_PLAYER_LIMIT; i++)
-		{
-			m_humanConnected[i] = g_pEngineServer2->GetPlayerNetInfo(CPlayerSlot(i)) != nullptr;
-		}
-		Msg("[AutoRestart] Late load detected; seeded %d connected player(s).\n", CountHumanPlayers());
+		Msg("[AutoRestart] Late load detected; %d player(s) currently connected.\n", CountHumanPlayers());
 	}
 
 	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_GameFrame), true);
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AutoRestartPlugin::Hook_StartupServer), true);
-	SH_ADD_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_OnClientConnected), false);
-	SH_ADD_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_ClientDisconnect), true);
 
 	// 0.0 forces a check on the first frame
 	m_lastCheckTime = 0.0;
@@ -156,8 +149,6 @@ bool AutoRestartPlugin::Unload(char *error, size_t maxlen)
 {
 	SH_REMOVE_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_GameFrame), true);
 	SH_REMOVE_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AutoRestartPlugin::Hook_StartupServer), true);
-	SH_REMOVE_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_OnClientConnected), false);
-	SH_REMOVE_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_ClientDisconnect), true);
 	return true;
 }
 
@@ -253,7 +244,7 @@ int AutoRestartPlugin::CountHumanPlayers() const
 	int count = 0;
 	for (int i = 0; i < ABSOLUTE_PLAYER_LIMIT; i++)
 	{
-		if (m_humanConnected[i])
+		if (g_pEngineServer2->GetPlayerNetInfo(CPlayerSlot(i)) != nullptr)
 		{
 			count++;
 		}
@@ -276,7 +267,7 @@ void AutoRestartPlugin::PrintToChatAll(const char *msg)
 	CSimpleRecipientFilter filter;
 	for (int i = 0; i < ABSOLUTE_PLAYER_LIMIT; i++)
 	{
-		if (m_humanConnected[i])
+		if (g_pEngineServer2->GetPlayerNetInfo(CPlayerSlot(i)) != nullptr)
 		{
 			filter.AddRecipient(i);
 		}
@@ -329,8 +320,7 @@ void AutoRestartPlugin::CheckAndRestart()
 		}
 		else
 		{
-			V_snprintf(desc, sizeof(desc), "%s - %d player%s online, restarting at next map.", reason, numPlayers,
-					   numPlayers == 1 ? "" : "s");
+			V_snprintf(desc, sizeof(desc), "%s - %d player%s online, restarting at next map.", reason, numPlayers, numPlayers == 1 ? "" : "s");
 		}
 		const char *title = m_serverName.empty() ? "AutoRestart" : m_serverName.c_str();
 		Discord_PostEmbed(m_discordWebhook, title, desc, color);
@@ -395,30 +385,6 @@ void AutoRestartPlugin::Hook_StartupServer(const GameSessionConfiguration_t &con
 	{
 		Msg("[AutoRestart] Map change with restart pending, shutting down server.\n");
 		g_pEngineServer2->ServerCommand("quit");
-	}
-
-	RETURN_META(MRES_IGNORED);
-}
-
-void AutoRestartPlugin::Hook_OnClientConnected(CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, const char *pszAddress,
-											   bool bFakePlayer)
-{
-	int s = slot.Get();
-	if (s >= 0 && s < ABSOLUTE_PLAYER_LIMIT)
-	{
-		m_humanConnected[s] = !bFakePlayer;
-	}
-
-	RETURN_META(MRES_IGNORED);
-}
-
-void AutoRestartPlugin::Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid,
-											  const char *pszNetworkID)
-{
-	int s = slot.Get();
-	if (s >= 0 && s < ABSOLUTE_PLAYER_LIMIT)
-	{
-		m_humanConnected[s] = false;
 	}
 
 	RETURN_META(MRES_IGNORED);
