@@ -320,7 +320,7 @@ void AutoRestartPlugin::CheckAndRestart()
 		}
 		else
 		{
-			V_snprintf(desc, sizeof(desc), "%s - %d player%s online, restarting at next map.", reason, numPlayers, numPlayers == 1 ? "" : "s");
+			V_snprintf(desc, sizeof(desc), "%s - %d player%s online, restarting once empty or at next map change.", reason, numPlayers, numPlayers == 1 ? "" : "s");
 		}
 		const char *title = m_serverName.empty() ? "AutoRestart" : m_serverName.c_str();
 		Discord_PostEmbed(m_discordWebhook, title, desc, color);
@@ -339,8 +339,8 @@ void AutoRestartPlugin::CheckAndRestart()
 	else if (!m_restartNeeded)
 	{
 		m_restartNeeded = true;
-		Msg("[AutoRestart] %s: %d player(s) online, will restart at next map.\n", reason, numPlayers);
-		PrintToChatAll("The server will restart at the next opportunity!");
+		Msg("[AutoRestart] %s: %d player(s) online, will restart once empty or at next map change.\n", reason, numPlayers);
+		PrintToChatAll("The server will restart once the server is empty or at the next map change!");
 	}
 }
 
@@ -383,7 +383,7 @@ void AutoRestartPlugin::Hook_StartupServer(const GameSessionConfiguration_t &con
 
 	if (m_restartNeeded || m_scheduledRestartNeeded || m_outOfDate)
 	{
-		Msg("[AutoRestart] Map change with restart pending, shutting down server.\n");
+		Msg("[AutoRestart] Restart pending, shutting down server.\n");
 		g_pEngineServer2->ServerCommand("quit");
 	}
 
