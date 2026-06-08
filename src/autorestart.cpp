@@ -12,6 +12,8 @@
 
 #include "usermessages.pb.h"
 
+#include <chrono>
+#include <csignal>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -21,6 +23,7 @@
 #include <sstream>
 #include <string>
 #include <filesystem>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
@@ -42,10 +45,14 @@ class GameSessionConfiguration_t
 
 SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
 SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t &, ISource2WorldSession *, const char *);
+SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64,
+				   const char *);
+SH_DECL_HOOK1_void(IServerGameDLL, ServerHibernationUpdate, SH_NOATTRIB, 0, bool);
 
 static const char *kBuildVersionFile = "/watchdog/cs2/latest.txt";
 static const char *kLayersDir = "/watchdog/layers";
-static const double kVersionCheckInterval = 60.0; // seconds
+static const double kVersionCheckInterval = 60.0; // seconds, GameFrame version poll
+static const int kWatcherIntervalSeconds = 30;    // background poll cadence while hibernating
 
 static std::string Trim(const std::string &s)
 {
@@ -134,10 +141,15 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 
 	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_GameFrame), true);
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AutoRestartPlugin::Hook_StartupServer), true);
+	SH_ADD_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_ClientDisconnect), true);
+	SH_ADD_HOOK(IServerGameDLL, ServerHibernationUpdate, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_ServerHibernationUpdate), true);
 
 	// 0.0 forces a check on the first frame
 	m_lastCheckTime = 0.0;
 	m_lastVersionCheckTime = -kVersionCheckInterval;
+
+	// Watch for updates while the server hibernates, where GameFrame is frozen.
+	m_watcherThread = std::thread(&AutoRestartPlugin::WatcherLoop, this);
 
 	Msg("[AutoRestart] Loaded. build_ver=%s, daily_restart=%s, discord=%s\n", m_buildVersion.c_str(), m_hasDailyRestart ? "on" : "off",
 		m_discordWebhook.empty() ? "off" : "on");
@@ -147,8 +159,22 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 
 bool AutoRestartPlugin::Unload(char *error, size_t maxlen)
 {
+	// Stop the watcher thread before tearing down hooks.
+	{
+		std::lock_guard<std::mutex> lock(m_watcherMutex);
+		m_stopWatcher = true;
+	}
+	m_watcherCv.notify_all();
+	if (m_watcherThread.joinable())
+	{
+		m_watcherThread.join();
+	}
+
 	SH_REMOVE_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_GameFrame), true);
 	SH_REMOVE_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AutoRestartPlugin::Hook_StartupServer), true);
+	SH_REMOVE_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_ClientDisconnect), true);
+	SH_REMOVE_HOOK(IServerGameDLL, ServerHibernationUpdate, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_ServerHibernationUpdate),
+				   true);
 	return true;
 }
 
@@ -217,6 +243,25 @@ bool AutoRestartPlugin::IsServerOutOfDate()
 			continue;
 		}
 		std::string current = ReadFileTrimmed(path);
+		if (!current.empty() && current != startupVer)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AutoRestartPlugin::IsOutOfDateSnapshot() const
+{
+	std::string latestBuild = ReadFileTrimmed(kBuildVersionFile);
+	if (!latestBuild.empty() && m_buildVersion != latestBuild)
+	{
+		return true;
+	}
+
+	for (const auto &[name, startupVer] : m_pluginVersions)
+	{
+		std::string current = ReadFileTrimmed(std::string(kLayersDir) + "/" + name + "/latest.txt");
 		if (!current.empty() && current != startupVer)
 		{
 			return true;
@@ -320,7 +365,8 @@ void AutoRestartPlugin::CheckAndRestart()
 		}
 		else
 		{
-			V_snprintf(desc, sizeof(desc), "%s - %d player%s online, restarting once empty or at next map change.", reason, numPlayers, numPlayers == 1 ? "" : "s");
+			V_snprintf(desc, sizeof(desc), "%s - %d player%s online, restarting once empty or at next map change.", reason, numPlayers,
+					   numPlayers == 1 ? "" : "s");
 		}
 		const char *title = m_serverName.empty() ? "AutoRestart" : m_serverName.c_str();
 		Discord_PostEmbed(m_discordWebhook, title, desc, color);
@@ -388,4 +434,60 @@ void AutoRestartPlugin::Hook_StartupServer(const GameSessionConfiguration_t &con
 	}
 
 	RETURN_META(MRES_IGNORED);
+}
+
+void AutoRestartPlugin::Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid,
+											  const char *pszNetworkID)
+{
+	if (!m_outOfDate)
+	{
+		m_outOfDate = IsServerOutOfDate();
+	}
+
+	if (!(m_restartNeeded || m_scheduledRestartNeeded || m_outOfDate))
+	{
+		RETURN_META(MRES_IGNORED);
+	}
+
+	int leaving = slot.Get();
+	for (int i = 0; i < ABSOLUTE_PLAYER_LIMIT; i++)
+	{
+		if (i != leaving && g_pEngineServer2->GetPlayerNetInfo(CPlayerSlot(i)) != nullptr)
+		{
+			RETURN_META(MRES_IGNORED);
+		}
+	}
+
+	Msg("[AutoRestart] Last player left with restart pending, shutting down server.\n");
+	g_pEngineServer2->ServerCommand("quit");
+
+	RETURN_META(MRES_IGNORED);
+}
+
+void AutoRestartPlugin::Hook_ServerHibernationUpdate(bool bHibernating)
+{
+	m_hibernating.store(bHibernating);
+	RETURN_META(MRES_IGNORED);
+}
+
+void AutoRestartPlugin::WatcherLoop()
+{
+	for (;;)
+	{
+		{
+			std::unique_lock<std::mutex> lock(m_watcherMutex);
+			m_watcherCv.wait_for(lock, std::chrono::seconds(kWatcherIntervalSeconds), [this] { return m_stopWatcher.load(); });
+			if (m_stopWatcher.load())
+			{
+				return;
+			}
+		}
+
+		if (m_hibernating.load() && IsOutOfDateSnapshot())
+		{
+			Msg("[AutoRestart] Update detected while hibernating, restarting idle server.\n");
+			kill(getpid(), SIGTERM);
+			return;
+		}
+	}
 }

@@ -16,9 +16,13 @@
 #include <playerslot.h>
 #include "networksystem/inetworkserializer.h"
 
+#include <atomic>
+#include <condition_variable>
 #include <filesystem>
 #include <map>
+#include <mutex>
 #include <string>
+#include <thread>
 
 #ifndef ABSOLUTE_PLAYER_LIMIT
 #define ABSOLUTE_PLAYER_LIMIT 64
@@ -33,6 +37,8 @@ public:
 public: // hooks
 	void Hook_GameFrame(bool simulating, bool bFirstTick, bool bLastTick);
 	void Hook_StartupServer(const GameSessionConfiguration_t &config, ISource2WorldSession *, const char *);
+	void Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID);
+	void Hook_ServerHibernationUpdate(bool bHibernating);
 
 public: // ISmmPlugin metadata
 	const char *GetAuthor() override
@@ -62,7 +68,7 @@ public: // ISmmPlugin metadata
 
 	const char *GetVersion() override
 	{
-		return "1.2.2";
+		return "1.3.0";
 	}
 
 	const char *GetDate() override
@@ -90,6 +96,15 @@ private:
 	// Lets IsServerOutOfDate() skip re-reading files that haven't moved.
 	bool VersionFileUnchanged(const std::string &path);
 
+	// While the server hibernates GameFrame is frozen, so the normal restart path can't run.
+	// This thread polls the version files and, if an update lands while hibernating,
+	// signals the process to shut down for relaunch.
+	void WatcherLoop();
+
+	// Thread-safe out-of-date check: reads only the immutable startup snapshot
+	// (m_buildVersion, m_pluginVersions) plus the files, never the mtime cache.
+	bool IsOutOfDateSnapshot() const;
+
 	std::string m_buildVersion;
 	std::map<std::string, std::string> m_pluginVersions; // snapshot taken at load
 
@@ -114,6 +129,14 @@ private:
 	// Empty-server quit is delayed so the async Discord webhook has time to flush.
 	bool m_quitPending = false;
 	double m_quitAtTime = 0.0; // Plat_FloatTime() at which to issue the deferred quit
+
+	// Background watcher state. m_hibernating is the engine's hibernation signal
+	// (set from Hook_ServerHibernationUpdate); the thread only acts while it's true.
+	std::atomic<bool> m_hibernating {false};
+	std::atomic<bool> m_stopWatcher {false};
+	std::thread m_watcherThread;
+	std::mutex m_watcherMutex;
+	std::condition_variable m_watcherCv;
 };
 
 extern AutoRestartPlugin g_AutoRestartPlugin;
