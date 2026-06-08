@@ -23,7 +23,9 @@
 #include <sstream>
 #include <string>
 #include <filesystem>
-#include <unistd.h>
+#ifndef _WIN32
+#include <unistd.h> // getpid (POSIX); cs2docker runs on Linux
+#endif
 
 namespace fs = std::filesystem;
 
@@ -486,7 +488,11 @@ void AutoRestartPlugin::WatcherLoop()
 		if (m_hibernating.load() && IsOutOfDateSnapshot())
 		{
 			Msg("[AutoRestart] Update detected while hibernating, restarting idle server.\n");
+#ifdef _WIN32
+			std::raise(SIGTERM);
+#else
 			kill(getpid(), SIGTERM);
+#endif
 			return;
 		}
 	}
