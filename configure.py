@@ -21,18 +21,18 @@ if ambuild_version.startswith('2.1'):
 parser = run.BuildParser(sourcePath=sys.path[0], api='2.2')
 parser.options.add_argument('--hl2sdk-root', type=str, dest='hl2sdk_root', default=None,
                        help='Root search folder for HL2SDKs')
-parser.options.add_argument('--hl2sdk-manifests', type=str, dest='hl2sdk_manifests', default=None,
+parser.options.add_argument('--hl2sdk-manifests', type=str, dest='hl2sdk_manifests', default='../metamod-source/hl2sdk-manifests',
                        help='HL2SDK manifests source tree folder')
-parser.options.add_argument('--mms_path', type=str, dest='mms_path', default=None,
+parser.options.add_argument('--mms_path', type=str, dest='mms_path', default='../metamod-source',
                        help='Metamod:Source source tree folder')
 parser.options.add_argument('--enable-debug', action='store_const', const='1', dest='debug',
                        help='Enable debugging symbols')
 parser.options.add_argument('--enable-optimize', action='store_const', const='1', dest='opt',
                        help='Enable optimization')
-parser.options.add_argument('-s', '--sdks', default='all', dest='sdks',
+parser.options.add_argument('-s', '--sdks', default='cs2', dest='sdks',
                        help='Build against specified SDKs; valid args are "all", "present", or '
                             'comma-delimited list of engine names (default: "all")')
-parser.options.add_argument('--targets', type=str, dest='targets', default=None,
+parser.options.add_argument('--targets', type=str, dest='targets', default='x86_64',
                             help="Override the target architecture (use commas to separate multiple targets).")
 # AddressSanitizer Instructions:
 # Copy devtools/dlhook/libasan.so.dlhook.so to the server
