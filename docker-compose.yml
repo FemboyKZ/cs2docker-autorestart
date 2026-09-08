@@ -1,7 +1,7 @@
 services:
-  build-linux:
+  build:
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ./output:/output
+      - ./output:/app/build
