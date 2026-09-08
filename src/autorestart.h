@@ -9,7 +9,6 @@
 #pragma once
 
 #include <ISmmPlugin.h>
-#include <sh_vector.h>
 
 #include <eiface.h>
 #include <iserver.h>
@@ -34,11 +33,15 @@ public:
 	bool Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bool late) override;
 	bool Unload(char *error, size_t maxlen) override;
 
+public:
+	AutoRestartPlugin();
+
 public: // hooks
-	void Hook_GameFrame(bool simulating, bool bFirstTick, bool bLastTick);
-	void Hook_StartupServer(const GameSessionConfiguration_t &config, ISource2WorldSession *, const char *);
-	void Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID);
-	void Hook_ServerHibernationUpdate(bool bHibernating);
+	KHook::Return<void> Hook_GameFrame(ISource2Server *, bool simulating, bool bFirstTick, bool bLastTick);
+	KHook::Return<void> Hook_StartupServer(INetworkServerService *, const GameSessionConfiguration_t &config, ISource2WorldSession *, const char *);
+	KHook::Return<void> Hook_ClientDisconnect(ISource2GameClients *, CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName,
+											  uint64 xuid, const char *pszNetworkID);
+	KHook::Return<void> Hook_ServerHibernationUpdate(ISource2Server *, bool bHibernating);
 
 public: // ISmmPlugin metadata
 	const char *GetAuthor() override
@@ -137,6 +140,11 @@ private:
 	std::thread m_watcherThread;
 	std::mutex m_watcherMutex;
 	std::condition_variable m_watcherCv;
+
+	KHook::Virtual<ISource2Server, void, bool, bool, bool> m_GameFrame;
+	KHook::Virtual<INetworkServerService, void, const GameSessionConfiguration_t &, ISource2WorldSession *, const char *> m_StartupServer;
+	KHook::Virtual<ISource2GameClients, void, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64, const char *> m_ClientDisconnect;
+	KHook::Virtual<ISource2Server, void, bool> m_ServerHibernationUpdate;
 };
 
 extern AutoRestartPlugin g_AutoRestartPlugin;

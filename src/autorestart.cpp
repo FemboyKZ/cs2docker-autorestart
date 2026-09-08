@@ -45,12 +45,6 @@ class GameSessionConfiguration_t
 {
 };
 
-SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
-SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t &, ISource2WorldSession *, const char *);
-SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64,
-				   const char *);
-SH_DECL_HOOK1_void(IServerGameDLL, ServerHibernationUpdate, SH_NOATTRIB, 0, bool);
-
 static const char *kBuildVersionFile = "/watchdog/cs2/latest.txt";
 static const char *kLayersDir = "/watchdog/layers";
 static const double kVersionCheckInterval = 60.0; // seconds, GameFrame version poll
@@ -77,6 +71,14 @@ static std::string ReadFileTrimmed(const std::string &path)
 	std::ostringstream ss;
 	ss << in.rdbuf();
 	return Trim(ss.str());
+}
+
+AutoRestartPlugin::AutoRestartPlugin()
+	: m_GameFrame(&ISource2Server::GameFrame, this, nullptr, &AutoRestartPlugin::Hook_GameFrame),
+	  m_StartupServer(&INetworkServerService::StartupServer, this, nullptr, &AutoRestartPlugin::Hook_StartupServer),
+	  m_ClientDisconnect(&ISource2GameClients::ClientDisconnect, this, nullptr, &AutoRestartPlugin::Hook_ClientDisconnect),
+	  m_ServerHibernationUpdate(&ISource2Server::ServerHibernationUpdate, this, nullptr, &AutoRestartPlugin::Hook_ServerHibernationUpdate)
+{
 }
 
 bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bool late)
@@ -141,10 +143,10 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 		Msg("[AutoRestart] Late load detected; %d player(s) currently connected.\n", CountHumanPlayers());
 	}
 
-	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_GameFrame), true);
-	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AutoRestartPlugin::Hook_StartupServer), true);
-	SH_ADD_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_ClientDisconnect), true);
-	SH_ADD_HOOK(IServerGameDLL, ServerHibernationUpdate, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_ServerHibernationUpdate), true);
+	m_GameFrame.Add(g_pSource2Server);
+	m_StartupServer.Add(g_pNetworkServerService);
+	m_ClientDisconnect.Add(g_pSource2GameClients);
+	m_ServerHibernationUpdate.Add(g_pSource2Server);
 
 	// 0.0 forces a check on the first frame
 	m_lastCheckTime = 0.0;
@@ -172,11 +174,10 @@ bool AutoRestartPlugin::Unload(char *error, size_t maxlen)
 		m_watcherThread.join();
 	}
 
-	SH_REMOVE_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_GameFrame), true);
-	SH_REMOVE_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AutoRestartPlugin::Hook_StartupServer), true);
-	SH_REMOVE_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &AutoRestartPlugin::Hook_ClientDisconnect), true);
-	SH_REMOVE_HOOK(IServerGameDLL, ServerHibernationUpdate, g_pSource2Server, SH_MEMBER(this, &AutoRestartPlugin::Hook_ServerHibernationUpdate),
-				   true);
+	m_GameFrame.Remove(g_pSource2Server);
+	m_StartupServer.Remove(g_pNetworkServerService);
+	m_ClientDisconnect.Remove(g_pSource2GameClients);
+	m_ServerHibernationUpdate.Remove(g_pSource2Server);
 	return true;
 }
 
@@ -392,7 +393,7 @@ void AutoRestartPlugin::CheckAndRestart()
 	}
 }
 
-void AutoRestartPlugin::Hook_GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
+KHook::Return<void> AutoRestartPlugin::Hook_GameFrame(ISource2Server *, bool simulating, bool bFirstTick, bool bLastTick)
 {
 	double now = Plat_FloatTime();
 
@@ -400,28 +401,29 @@ void AutoRestartPlugin::Hook_GameFrame(bool simulating, bool bFirstTick, bool bL
 	{
 		Msg("[AutoRestart] Deferred quit firing, shutting down server.\n");
 		g_pEngineServer2->ServerCommand("quit");
-		RETURN_META(MRES_IGNORED);
+		return {KHook::Action::Ignore};
 	}
 
 	if (now - m_lastCheckTime < 10.0)
 	{
-		RETURN_META(MRES_IGNORED);
+		return {KHook::Action::Ignore};
 	}
 
 	m_lastCheckTime = now;
 	CheckAndRestart();
 
-	RETURN_META(MRES_IGNORED);
+	return {KHook::Action::Ignore};
 }
 
-void AutoRestartPlugin::Hook_StartupServer(const GameSessionConfiguration_t &config, ISource2WorldSession *, const char *)
+KHook::Return<void> AutoRestartPlugin::Hook_StartupServer(INetworkServerService *, const GameSessionConfiguration_t &config, ISource2WorldSession *,
+														  const char *)
 {
 	// The first StartupServer call is the initial boot map; ignore it so we don't
 	// quit immediately. Subsequent calls are map changes.
 	m_startupCount++;
 	if (m_startupCount <= 1)
 	{
-		RETURN_META(MRES_IGNORED);
+		return {KHook::Action::Ignore};
 	}
 
 	if (!m_outOfDate)
@@ -435,11 +437,11 @@ void AutoRestartPlugin::Hook_StartupServer(const GameSessionConfiguration_t &con
 		g_pEngineServer2->ServerCommand("quit");
 	}
 
-	RETURN_META(MRES_IGNORED);
+	return {KHook::Action::Ignore};
 }
 
-void AutoRestartPlugin::Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid,
-											  const char *pszNetworkID)
+KHook::Return<void> AutoRestartPlugin::Hook_ClientDisconnect(ISource2GameClients *, CPlayerSlot slot, ENetworkDisconnectionReason reason,
+															 const char *pszName, uint64 xuid, const char *pszNetworkID)
 {
 	if (!m_outOfDate)
 	{
@@ -448,7 +450,7 @@ void AutoRestartPlugin::Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconne
 
 	if (!(m_restartNeeded || m_scheduledRestartNeeded || m_outOfDate))
 	{
-		RETURN_META(MRES_IGNORED);
+		return {KHook::Action::Ignore};
 	}
 
 	int leaving = slot.Get();
@@ -456,20 +458,20 @@ void AutoRestartPlugin::Hook_ClientDisconnect(CPlayerSlot slot, ENetworkDisconne
 	{
 		if (i != leaving && g_pEngineServer2->GetPlayerNetInfo(CPlayerSlot(i)) != nullptr)
 		{
-			RETURN_META(MRES_IGNORED);
+			return {KHook::Action::Ignore};
 		}
 	}
 
 	Msg("[AutoRestart] Last player left with restart pending, shutting down server.\n");
 	g_pEngineServer2->ServerCommand("quit");
 
-	RETURN_META(MRES_IGNORED);
+	return {KHook::Action::Ignore};
 }
 
-void AutoRestartPlugin::Hook_ServerHibernationUpdate(bool bHibernating)
+KHook::Return<void> AutoRestartPlugin::Hook_ServerHibernationUpdate(ISource2Server *, bool bHibernating)
 {
 	m_hibernating.store(bHibernating);
-	RETURN_META(MRES_IGNORED);
+	return {KHook::Action::Ignore};
 }
 
 void AutoRestartPlugin::WatcherLoop()
