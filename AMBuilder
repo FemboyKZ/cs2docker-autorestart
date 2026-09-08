@@ -32,9 +32,10 @@ for sdk_target in MMSPlugin.sdk_targets:
   ]
 
   # Only the protos needed for CCSUsrMsg/CUserMessageTextMsg chat output.
-  # usermessages.proto -> networkbasetypes.proto -> network_connection.proto
+  # usermessages.proto -> networkbasetypes.proto -> network_connection.proto + valveextensions.proto
   # (google/protobuf/descriptor.proto is a protoc well-known type, resolved automatically)
   protoc_builder = builder.tools.Protoc(protoc = sdk_target.protoc, sources = [
+    os.path.join(sdk['path'], 'common', 'valveextensions.proto'),
     os.path.join(sdk['path'], 'common', 'network_connection.proto'),
     os.path.join(sdk['path'], 'common', 'networkbasetypes.proto'),
     os.path.join(sdk['path'], 'game', 'shared', 'usermessages.proto'),
