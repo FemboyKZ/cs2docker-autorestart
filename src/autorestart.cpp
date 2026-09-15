@@ -49,6 +49,29 @@ static const char *kBuildVersionFile = "/watchdog/cs2/latest.txt";
 static const char *kLayersDir = "/watchdog/layers";
 static const double kVersionCheckInterval = 60.0; // seconds, GameFrame version poll
 static const int kWatcherIntervalSeconds = 30;    // background poll cadence while hibernating
+static const int kQuitTimeoutSeconds = 60;
+
+// Engine shutdown can wedge after plugins unload (another plugin's thread, Steam, etc.),
+// leaving a dead server that cs2docker never relaunches. Force exit 0 so its loop restarts us.
+// The thread only touches its own stack, and the .so is linked nodelete, so plugin unload is safe.
+static void ArmQuitWatchdog()
+{
+	static std::atomic<bool> armed {false};
+	if (armed.exchange(true))
+	{
+		return;
+	}
+	std::thread(
+		[]
+		{
+			std::this_thread::sleep_for(std::chrono::seconds(kQuitTimeoutSeconds));
+			static const char msg[] = "[AutoRestart] Shutdown stalled, forcing exit.\n";
+			std::fwrite(msg, 1, sizeof(msg) - 1, stderr);
+			std::fflush(stderr);
+			std::_Exit(0);
+		})
+		.detach();
+}
 
 static std::string Trim(const std::string &s)
 {
@@ -400,6 +423,7 @@ KHook::Return<void> AutoRestartPlugin::Hook_GameFrame(ISource2Server *, bool sim
 	if (m_quitPending && now >= m_quitAtTime)
 	{
 		Msg("[AutoRestart] Deferred quit firing, shutting down server.\n");
+		ArmQuitWatchdog();
 		g_pEngineServer2->ServerCommand("quit");
 		return {KHook::Action::Ignore};
 	}
@@ -434,6 +458,7 @@ KHook::Return<void> AutoRestartPlugin::Hook_StartupServer(INetworkServerService 
 	if (m_restartNeeded || m_scheduledRestartNeeded || m_outOfDate)
 	{
 		Msg("[AutoRestart] Restart pending, shutting down server.\n");
+		ArmQuitWatchdog();
 		g_pEngineServer2->ServerCommand("quit");
 	}
 
@@ -463,6 +488,7 @@ KHook::Return<void> AutoRestartPlugin::Hook_ClientDisconnect(ISource2GameClients
 	}
 
 	Msg("[AutoRestart] Last player left with restart pending, shutting down server.\n");
+	ArmQuitWatchdog();
 	g_pEngineServer2->ServerCommand("quit");
 
 	return {KHook::Action::Ignore};
@@ -490,6 +516,7 @@ void AutoRestartPlugin::WatcherLoop()
 		if (m_hibernating.load() && IsOutOfDateSnapshot())
 		{
 			Msg("[AutoRestart] Update detected while hibernating, restarting idle server.\n");
+			ArmQuitWatchdog();
 #ifdef _WIN32
 			std::raise(SIGTERM);
 #else
