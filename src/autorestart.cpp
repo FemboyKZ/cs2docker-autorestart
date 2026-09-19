@@ -158,7 +158,7 @@ bool AutoRestartPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t max
 		m_serverName = Trim(serverName);
 	}
 
-	// On a late load the boot map's StartupServer already fired
+	// On a late load the boot map's StartupServer already fired,
 	// count it as seen so the next map change isn't mistaken for the initial boot.
 	if (late)
 	{
@@ -442,8 +442,8 @@ KHook::Return<void> AutoRestartPlugin::Hook_GameFrame(ISource2Server *, bool sim
 KHook::Return<void> AutoRestartPlugin::Hook_StartupServer(INetworkServerService *, const GameSessionConfiguration_t &config, ISource2WorldSession *,
 														  const char *)
 {
-	// The first StartupServer call is the initial boot map; ignore it so we don't
-	// quit immediately. Subsequent calls are map changes.
+	// The first StartupServer call is the initial boot map; ignore it so we don't quit immediately.
+	// Subsequent calls are map changes.
 	m_startupCount++;
 	if (m_startupCount <= 1)
 	{

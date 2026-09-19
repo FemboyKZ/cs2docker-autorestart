@@ -2,8 +2,8 @@
  * AutoRestart - Metamod:Source 2.0 plugin
  *
  * Restarts the CS2 server when a game/plugin update is detected
- * (via cs2docker's /watchdog version files)
- * or at a configured daily time. Meant to be used with cs2docker.
+ * (via cs2docker's /watchdog version files) or at a configured daily time.
+ * Meant to be used with cs2docker.
  */
 
 #pragma once
@@ -104,8 +104,8 @@ private:
 	// signals the process to shut down for relaunch. It never calls into the engine.
 	void WatcherLoop();
 
-	// Thread-safe out-of-date check: reads only the immutable startup snapshot
-	// (m_buildVersion, m_pluginVersions) plus the files, never the mtime cache.
+	// Thread-safe out-of-date check:
+	// reads only the immutable startup snapshot (m_buildVersion, m_pluginVersions) plus the files, never the mtime cache.
 	bool IsOutOfDateSnapshot() const;
 
 	std::string m_buildVersion;
@@ -133,8 +133,8 @@ private:
 	std::atomic<bool> m_quitPending {false};
 	double m_quitAtTime = 0.0; // Plat_FloatTime() at which to issue the deferred quit
 
-	// Background watcher state. m_hibernating is the engine's hibernation signal
-	// (set from Hook_ServerHibernationUpdate); the thread only acts while it's true.
+	// Background watcher state. m_hibernating is the engine's hibernation signal (set from Hook_ServerHibernationUpdate);
+	// the thread only acts while it's true.
 	std::atomic<bool> m_hibernating {false};
 	std::atomic<bool> m_stopWatcher {false};
 	std::thread m_watcherThread;
