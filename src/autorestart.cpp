@@ -296,7 +296,7 @@ bool AutoRestartPlugin::IsOutOfDateSnapshot() const
 	return false;
 }
 
-bool AutoRestartPlugin::CheckDailyRestart()
+bool AutoRestartPlugin::CheckDailyRestart() const
 {
 	if (!m_hasDailyRestart || m_scheduledRestartNeeded)
 	{
@@ -513,9 +513,10 @@ void AutoRestartPlugin::WatcherLoop()
 			}
 		}
 
-		if (m_hibernating.load() && IsOutOfDateSnapshot())
+		// A hibernating server is empty, so any pending or due restart can happen right away.
+		if (m_hibernating && (m_quitPending || m_scheduledRestartNeeded || CheckDailyRestart() || IsOutOfDateSnapshot()))
 		{
-			Msg("[AutoRestart] Update detected while hibernating, restarting idle server.\n");
+			Msg("[AutoRestart] Restart due while hibernating, restarting idle server.\n");
 			ArmQuitWatchdog();
 #ifdef _WIN32
 			std::raise(SIGTERM);

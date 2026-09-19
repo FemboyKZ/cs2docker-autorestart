@@ -88,7 +88,7 @@ private:
 	// Ported from the C# OnTimerCallback / OnMapEnd logic.
 	void CheckAndRestart();
 	bool IsServerOutOfDate();
-	bool CheckDailyRestart();
+	bool CheckDailyRestart() const;
 	int CountHumanPlayers() const;
 	void PrintToChatAll(const char *msg);
 
@@ -100,8 +100,8 @@ private:
 	bool VersionFileUnchanged(const std::string &path);
 
 	// While the server hibernates GameFrame is frozen, so the normal restart path can't run.
-	// This thread polls the version files and, if an update lands while hibernating,
-	// signals the process to shut down for relaunch.
+	// This thread polls for a pending/due restart (update, daily time) and, while hibernating,
+	// signals the process to shut down for relaunch. It never calls into the engine.
 	void WatcherLoop();
 
 	// Thread-safe out-of-date check: reads only the immutable startup snapshot
@@ -116,21 +116,21 @@ private:
 	bool m_discordNotified = false; // ensures we post to Discord only once per restart decision
 
 	bool m_restartNeeded = false;
-	bool m_scheduledRestartNeeded = false;
+	std::atomic<bool> m_scheduledRestartNeeded {false};
 
 	bool m_outOfDate = false;
 	double m_lastVersionCheckTime = 0.0;                                    // Plat_FloatTime() of last version-file poll
 	std::map<std::string, std::filesystem::file_time_type> m_versionMtimes; // path -> last-seen mtime
 
 	bool m_hasDailyRestart = false;
-	int m_dailyRestartSeconds = 0;  // seconds since UTC midnight
-	int m_lastDailyRestartDay = -1; // days since unix epoch (UTC) of last daily restart
+	int m_dailyRestartSeconds = 0;               // seconds since UTC midnight
+	std::atomic<int> m_lastDailyRestartDay {-1}; // days since unix epoch (UTC) of last daily restart
 
 	double m_lastCheckTime = 0.0; // Plat_FloatTime() of last 10s tick
 	int m_startupCount = 0;       // number of StartupServer calls seen (first == initial boot map)
 
 	// Empty-server quit is delayed so the async Discord webhook has time to flush.
-	bool m_quitPending = false;
+	std::atomic<bool> m_quitPending {false};
 	double m_quitAtTime = 0.0; // Plat_FloatTime() at which to issue the deferred quit
 
 	// Background watcher state. m_hibernating is the engine's hibernation signal
