@@ -8,8 +8,8 @@ on:
     branches: ["*"]
 
 jobs:
-  build-linux:
-    name: Linux
+  build-steamrt3:
+    name: SteamRT3
     runs-on: ubuntu-latest
     container:
       image: registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest
@@ -49,31 +49,83 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: autorestart-linux
+          name: autorestart-steamrt3
+          path: staging
+
+  build-steamrt4:
+    name: SteamRT4
+    runs-on: ubuntu-latest
+    container:
+      image: registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          git config --global --add safe.directory $GITHUB_WORKSPACE
+          git clone https://github.com/alliedmodders/ambuild.git
+          cd ambuild && python3 setup.py install
+
+      - name: Configure
+        run: |
+          mkdir -p build && cd build
+          python3 ../configure.py \
+            --sdks cs2 \
+            --targets x86_64 \
+            --mms_path ../metamod-source \
+            --hl2sdk-manifests ../metamod-source/hl2sdk-manifests \
+            --enable-optimize
+
+      - name: Build
+        working-directory: build
+        run: ambuild
+
+      - name: Stage package
+        run: |
+          mkdir -p staging/addons
+          cp -r build/package/addons/* staging/addons/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: autorestart-steamrt4
           path: staging
 
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-linux]
+    needs: [build-steamrt3, build-steamrt4]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Download Linux artifact
+      - name: Download SteamRT3 artifact
         uses: actions/download-artifact@v8
         with:
-          name: autorestart-linux
-          path: autorestart-linux
+          name: autorestart-steamrt3
+          path: autorestart-steamrt3
+
+      - name: Download SteamRT4 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: autorestart-steamrt4
+          path: autorestart-steamrt4
 
       - name: Create archives
         run: |
-          cd autorestart-linux && zip -r ../autorestart-${{ github.ref_name }}-linux.zip . && cd ..
+          cd autorestart-steamrt3 && zip -r ../autorestart-${{ github.ref_name }}-steamrt3.zip . && cd ..
+          cd autorestart-steamrt4 && zip -r ../autorestart-${{ github.ref_name }}-steamrt4.zip . && cd ..
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            autorestart-${{ github.ref_name }}-linux.zip
+            autorestart-${{ github.ref_name }}-steamrt3.zip
+            autorestart-${{ github.ref_name }}-steamrt4.zip
           generate_release_notes: true
