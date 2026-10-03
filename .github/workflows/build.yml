@@ -12,7 +12,7 @@ jobs:
     name: SteamRT3
     runs-on: ubuntu-latest
     container:
-      image: registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest
+      image: ghcr.io/femboykz/build-containers:steamrt3
 
     steps:
       - name: Checkout
@@ -21,14 +21,9 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Install dependencies
-        run: |
-          git config --global --add safe.directory $GITHUB_WORKSPACE
-          git clone https://github.com/alliedmodders/ambuild.git
-          cd ambuild && python3 setup.py install
-
       - name: Configure
         run: |
+          git config --global --add safe.directory $GITHUB_WORKSPACE
           mkdir -p build && cd build
           python3 ../configure.py \
             --sdks cs2 \
@@ -56,7 +51,7 @@ jobs:
     name: SteamRT4
     runs-on: ubuntu-latest
     container:
-      image: registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk:latest
+      image: ghcr.io/femboykz/build-containers:steamrt4
 
     steps:
       - name: Checkout
@@ -65,14 +60,9 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Install dependencies
-        run: |
-          git config --global --add safe.directory $GITHUB_WORKSPACE
-          git clone https://github.com/alliedmodders/ambuild.git
-          cd ambuild && python3 setup.py install
-
       - name: Configure
         run: |
+          git config --global --add safe.directory $GITHUB_WORKSPACE
           mkdir -p build && cd build
           python3 ../configure.py \
             --sdks cs2 \
