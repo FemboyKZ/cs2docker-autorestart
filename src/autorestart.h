@@ -71,7 +71,7 @@ public: // ISmmPlugin metadata
 
 	const char *GetVersion() override
 	{
-		return "1.4.3";
+		return "1.4.4";
 	}
 
 	const char *GetDate() override
