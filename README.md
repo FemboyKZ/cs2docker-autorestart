@@ -28,44 +28,25 @@ All read from the environment (set by CS2Docker):
 | `daily_restart_time` | no       | UTC time `HH:mm` (or `HH:mm:ss`) for a daily restart.               |
 | `discord_webhook`    | no       | Discord webhook URL; a message posted once per restart decision.    |
 
-## Building
+## Build
 
-Requires the submodules (Metamod:Source + HL2SDK-CS2, with the nested `hl2sdk-manifests`):
+### Prerequisites
 
-```sh
-git submodule update --init --recursive
-```
+- This repository is cloned recursively (ie. has submodules)
+- [python3](https://www.python.org/)
+- [ambuild](https://github.com/alliedmodders/ambuild), make sure `ambuild` is in your `PATH`
+- MSVC (VS build tools) on Windows / Clang on Linux
 
-### Docker (recommended)
+### AMBuild
 
-Produces the Linux `linuxsteamrt64.so` and the Metamod plugin layout:
-
-```sh
-docker compose up --build
-```
-
-Result:
-
-```text
-output/addons/metamod/autorestart.vdf
-output/addons/autorestart/bin/linuxsteamrt64/autorestart.so
-```
-
-Drop the contents of `output/addons/` into the server's `game/csgo/addons/` (this is what the CS2Docker `autorestart` layer ships).
-
-### Local (AMBuild)
-
-Needs Python 3, [AMBuild](https://github.com/alliedmodders/ambuild), and clang:
-
-```sh
-mkdir build && cd build
-python3 ../configure.py \
-  --sdks cs2 \
-  --targets x86_64 \
-  --mms_path ../metamod-source \
-  --hl2sdk-manifests ../metamod-source/hl2sdk-manifests \
-  --enable-optimize
+```bash
+mkdir -p build && cd build
+python3 ../configure.py --enable-optimize
 ambuild
 ```
 
-The packaged output is in `build/package/addons/`.
+### Docker
+
+```bash
+docker compose run --rm build
+```
