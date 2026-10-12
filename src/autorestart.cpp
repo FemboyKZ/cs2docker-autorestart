@@ -419,6 +419,7 @@ void AutoRestartPlugin::CheckAndRestart()
 KHook::Return<void> AutoRestartPlugin::Hook_GameFrame(ISource2Server *, bool simulating, bool bFirstTick, bool bLastTick)
 {
 	double now = Plat_FloatTime();
+	m_lastFrameTime.store(now);
 
 	if (m_quitPending && now >= m_quitAtTime)
 	{
@@ -514,7 +515,9 @@ void AutoRestartPlugin::WatcherLoop()
 		}
 
 		// A hibernating server is empty, so any pending or due restart can happen right away.
-		if (m_hibernating && (m_quitPending || m_scheduledRestartNeeded || CheckDailyRestart() || IsOutOfDateSnapshot()))
+		// Frames still running means the hibernation signal is stale and players may be on.
+		bool framesStopped = Plat_FloatTime() - m_lastFrameTime >= kWatcherIntervalSeconds;
+		if (m_hibernating && framesStopped && (m_quitPending || m_scheduledRestartNeeded || CheckDailyRestart() || IsOutOfDateSnapshot()))
 		{
 			Msg("[AutoRestart] Restart due while hibernating, restarting idle server.\n");
 			ArmQuitWatchdog();

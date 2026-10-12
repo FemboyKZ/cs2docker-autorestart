@@ -71,7 +71,7 @@ public: // ISmmPlugin metadata
 
 	const char *GetVersion() override
 	{
-		return "1.4.5";
+		return "1.4.6";
 	}
 
 	const char *GetDate() override
@@ -135,7 +135,10 @@ private:
 
 	// Background watcher state. m_hibernating is the engine's hibernation signal (set from Hook_ServerHibernationUpdate);
 	// the thread only acts while it's true.
+	// The engine reports hibernation on a map change and never reports the wake-up when players carry over,
+	// so the signal alone can be stale; m_lastFrameTime (Plat_FloatTime() of the last GameFrame) confirms frames really stopped.
 	std::atomic<bool> m_hibernating {false};
+	std::atomic<double> m_lastFrameTime {0.0};
 	std::atomic<bool> m_stopWatcher {false};
 	std::thread m_watcherThread;
 	std::mutex m_watcherMutex;
