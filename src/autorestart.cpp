@@ -1,11 +1,11 @@
 #include "autorestart.h"
 #include "discord.h"
 #include "recipientfilter.h"
+#include "shareddefs.h"
 
-#include "engine/igameeventsystem.h"
+#include "engine2/igameeventsystem.h"
 #include "interfaces/interfaces.h" // provides g_pSource2Server, g_pSource2GameClients, g_pNetworkServerService, g_pNetworkMessages
 #include "networksystem/inetworkmessages.h"
-#include "networksystem/netmessage.h"
 
 #include "tier0/dbg.h"
 #include "tier0/platform.h"
@@ -30,9 +30,6 @@
 namespace fs = std::filesystem;
 
 #include "tier0/memdbgon.h"
-
-// HUD destination for chat text (HUD_PRINTTALK). Not exported by a public header.
-#define HUD_PRINTTALK 3
 
 AutoRestartPlugin g_AutoRestartPlugin;
 

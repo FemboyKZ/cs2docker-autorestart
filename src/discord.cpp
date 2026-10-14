@@ -4,7 +4,8 @@
 
 #include "discord.h"
 
-#include <eiface.h>
+#include <engine2/isource2server.h>
+#include <engine2/ivengineserver2.h>
 #include <steam/steam_gameserver.h>
 
 #include <string>

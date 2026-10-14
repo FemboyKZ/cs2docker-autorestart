@@ -10,8 +10,10 @@
 
 #include <ISmmPlugin.h>
 
-#include <eiface.h>
-#include <iserver.h>
+#include <engine2/isource2server.h>
+#include <engine2/ivengineserver2.h>
+#include <engine2/inetworkserverservice.h>
+#include <engine2/networkgameserverbase.h>
 #include <playerslot.h>
 #include "networksystem/inetworkserializer.h"
 
@@ -22,10 +24,6 @@
 #include <mutex>
 #include <string>
 #include <thread>
-
-#ifndef ABSOLUTE_PLAYER_LIMIT
-#define ABSOLUTE_PLAYER_LIMIT 64
-#endif
 
 class AutoRestartPlugin : public ISmmPlugin, public IMetamodListener
 {
