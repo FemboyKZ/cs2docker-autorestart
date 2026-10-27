@@ -328,12 +328,13 @@ void AutoRestartPlugin::PrintToChatAll(const char *msg)
 	data->set_dest(HUD_PRINTTALK);
 	data->add_param(msg);
 
-	CSimpleRecipientFilter filter;
+	CRecipientFilter filter;
+	filter.MakeReliable();
 	for (int i = 0; i < ABSOLUTE_PLAYER_LIMIT; i++)
 	{
 		if (g_pEngineServer2->GetPlayerNetInfo(CPlayerSlot(i)) != nullptr)
 		{
-			filter.AddRecipient(i);
+			filter.AddRecipient(CPlayerSlot(i));
 		}
 	}
 
