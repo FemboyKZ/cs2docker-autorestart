@@ -38,10 +38,6 @@ IGameEventSystem *g_gameEventSystem = nullptr;
 
 PLUGIN_EXPOSE(AutoRestartPlugin, g_AutoRestartPlugin);
 
-class GameSessionConfiguration_t
-{
-};
-
 static const char *kBuildVersionFile = "/watchdog/cs2/latest.txt";
 static const char *kLayersDir = "/watchdog/layers";
 static const double kVersionCheckInterval = 60.0; // seconds, GameFrame version poll
