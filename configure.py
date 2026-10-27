@@ -38,7 +38,7 @@ parser.options.add_argument(
     help="HL2SDK manifests source tree folder",
 )
 parser.options.add_argument(
-    "--mms_path",
+    "--mms-path",
     type=str,
     dest="mms_path",
     default="../metamod-source",
