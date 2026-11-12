@@ -318,7 +318,7 @@ int AutoRestartPlugin::CountHumanPlayers() const
 
 void AutoRestartPlugin::PrintToChatAll(const char *msg)
 {
-	INetworkMessageInternal *pNetMsg = g_pNetworkMessages->FindNetworkMessagePartial("TextMsg");
+	NetMessageInfo_t *pNetMsg = g_pNetworkMessages->FindNetworkMessagePartial("TextMsg");
 	if (!pNetMsg)
 	{
 		return;
